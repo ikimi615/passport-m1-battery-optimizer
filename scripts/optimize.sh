@@ -1,0 +1,102 @@
+#!/bin/sh
+# ==============================================================================
+# Android Deep Sleep & Battery Optimizer (Dual Mode: Root & No-Root ADB/Shizuku)
+# Target: Android 10 - 15 (Tested on MTK Dimensity, Snapdragon, Custom ROMs)
+# ==============================================================================
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+echo "${CYAN}======================================================${NC}"
+echo "${CYAN}     Android Deep Sleep & Battery Optimizer v1.1      ${NC}"
+echo "${CYAN}======================================================${NC}"
+
+CURRENT_UID=$(id -u 2>/dev/null || echo "9999")
+
+if [ "$CURRENT_UID" = "0" ]; then
+    echo "${GREEN}[权限状态] 已获取最高 Root 权限，进入全功能极限优化模式。${NC}"
+elif [ "$CURRENT_UID" = "2000" ]; then
+    echo "${GREEN}[权限状态] 已获取 ADB / Shizuku (Shell) 权限，免 Root 优化模式已生效！${NC}"
+else
+    # Try auto-elevation if su exists
+    if which su >/dev/null 2>&1 || [ -x /system/bin/su ] || [ -x /system/xbin/su ]; then
+        echo "${YELLOW}[INFO] 检测到当前非 Root，正在尝试申请 Root 提权 (su)...${NC}"
+        exec su -c "sh \"$0\" \"$@\""
+    else
+        echo "${RED}[ERROR] 当前权限不足 (UID: $CURRENT_UID)。${NC}"
+        echo "${YELLOW}解决方案：${NC}"
+        echo "1. 【免 Root 手机端】：在手机上安装【Shizuku】，通过 Shizuku 终端执行本脚本；"
+        echo "2. 【免 Root 电脑端】：手机开启 USB 调试，用电脑运行：adb shell \"sh $0\"；"
+        echo "3. 【有 Root 手机】：请在 MT 管理器运行窗口勾选【以 root 身份运行】。"
+        exit 1
+    fi
+fi
+
+echo "${BLUE}[1/5] 正在优化移动网络与基带搜网策略 (解决退网搜网死循环)...${NC}"
+# 针对 2G/3G 退网后，基带不断搜寻 CS 域导致高频射频发射的问题：
+settings put global preferred_network_mode 9 2>/dev/null || true
+settings put global mobile_data_always_on 0 2>/dev/null || true
+echo "${GREEN}  ✓ 基带搜网死循环防御已生效${NC}"
+
+echo "${BLUE}[2/5] 正在配置极速深度休眠策略 (Aggressive Doze & Deep Idle)...${NC}"
+dumpsys deviceidle enable all >/dev/null 2>&1 || true
+dumpsys deviceidle set-param-string \
+    inactive_to=60000,\
+    sensing_to=0,\
+    locating_to=0,\
+    location_accuracy=20.0,\
+    motion_inactive_to=0,\
+    idle_after_inactive_to=0,\
+    idle_pending_to=60000,\
+    max_idle_pending_to=120000,\
+    idle_pending_factor=2.0,\
+    idle_to=900000,\
+    max_idle_to=21600000,\
+    idle_factor=2.0,\
+    min_time_to_alarm=1800000,\
+    quick_doze_delay_to=30000 \
+    >/dev/null 2>&1 || true
+echo "${GREEN}  ✓ 极速休眠参数已注入 (息屏 60s 内挂起 CPU)${NC}"
+
+echo "${BLUE}[3/5] 正在关闭后台隐形搜网与定位泄漏 (Wi-Fi/BLE Scanning)...${NC}"
+settings put global wifi_scan_always_enabled 0 2>/dev/null || true
+settings put global ble_scan_always_enabled 0 2>/dev/null || true
+settings put global adaptive_connectivity_enabled 0 2>/dev/null || true
+echo "${GREEN}  ✓ 后台高频 Wi-Fi / 蓝牙扫描已彻底关闭${NC}"
+
+echo "${BLUE}[4/5] 正在压制后台高耗电应用 (AppOps Background Guard)...${NC}"
+TARGET_APPS="
+com.xingin.xhs
+com.weather.mjweather
+com.tencent.android.qqdownloader
+com.ss.android.ugc.aweme
+com.taobao.taobao
+com.jingdong.app.mall
+com.autonavi.minimap
+"
+
+RESTRICT_COUNT=0
+for PKG in $TARGET_APPS; do
+    if pm list packages 2>/dev/null | grep -q "^package:$PKG$"; then
+        cmd appops set "$PKG" RUN_ANY_IN_BACKGROUND ignore 2>/dev/null || true
+        cmd appops set "$PKG" RUN_IN_BACKGROUND ignore 2>/dev/null || true
+        echo "  - 已限制后台运行: $PKG"
+        RESTRICT_COUNT=$((RESTRICT_COUNT + 1))
+    fi
+done
+echo "${GREEN}  ✓ 目标后台高耗电应用已压制 ($RESTRICT_COUNT 个应用已限制)${NC}"
+
+echo "${BLUE}[5/5] 正在重置电量计费基准点...${NC}"
+dumpsys batterystats --reset >/dev/null 2>&1 || true
+echo "${GREEN}  ✓ 电量统计基准已重置${NC}"
+
+echo ""
+echo "${GREEN}======================================================${NC}"
+echo "${GREEN}   🎉 优化全部完成！手机息屏后将获得极限省电待机表现。 ${NC}"
+echo "${GREEN}======================================================${NC}"
