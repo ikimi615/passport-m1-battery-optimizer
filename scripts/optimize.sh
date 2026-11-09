@@ -38,31 +38,36 @@ else
     fi
 fi
 
-echo "${BLUE}[1/5] 正在优化移动网络与基带搜网策略 (解决退网搜网死循环)...${NC}"
-# 针对 2G/3G 退网后，基带不断搜寻 CS 域导致高频射频发射的问题：
+echo "${BLUE}[1/5] 正在优化移动网络与基带搜网策略 (解决退网搜网死循环与 5G 射频高功耗)...${NC}"
+# 针对 2G/3G 退网搜网死循环，并锁定 4G LTE (防止 5G SA 高频带 n78 空载发热):
+cmd phone set-allowed-network-types-for-users -s 0 01001111101111111111 2>/dev/null || true
 settings put global preferred_network_mode 9 2>/dev/null || true
+settings put global preferred_network_mode1 9 2>/dev/null || true
 settings put global mobile_data_always_on 0 2>/dev/null || true
-echo "${GREEN}  ✓ 基带搜网死循环防御已生效${NC}"
+echo "${GREEN}  ✓ 基带搜网死循环防御与 4G 节能频段已锁定${NC}"
 
-echo "${BLUE}[2/5] 正在配置极速深度休眠策略 (Aggressive Doze & Deep Idle)...${NC}"
+echo "${BLUE}[2/5] 正在配置极速深度休眠策略 (持久化 DeviceConfig 极速 Doze)...${NC}"
 dumpsys deviceidle enable all >/dev/null 2>&1 || true
-dumpsys deviceidle set-param-string \
-    inactive_to=60000,\
-    sensing_to=0,\
-    locating_to=0,\
-    location_accuracy=20.0,\
-    motion_inactive_to=0,\
-    idle_after_inactive_to=0,\
-    idle_pending_to=60000,\
-    max_idle_pending_to=120000,\
-    idle_pending_factor=2.0,\
-    idle_to=900000,\
-    max_idle_to=21600000,\
-    idle_factor=2.0,\
-    min_time_to_alarm=1800000,\
-    quick_doze_delay_to=30000 \
-    >/dev/null 2>&1 || true
-echo "${GREEN}  ✓ 极速休眠参数已注入 (息屏 60s 内挂起 CPU)${NC}"
+
+# 写入 Android 10-15 官方持久化 DeviceConfig 数据库 (开机自动生效，不再失效)
+device_config put device_idle inactive_to 60000 2>/dev/null || true
+device_config put device_idle sensing_to 0 2>/dev/null || true
+device_config put device_idle locating_to 0 2>/dev/null || true
+device_config put device_idle location_accuracy 20.0 2>/dev/null || true
+device_config put device_idle motion_inactive_to 0 2>/dev/null || true
+device_config put device_idle idle_after_inactive_to 0 2>/dev/null || true
+device_config put device_idle idle_pending_to 60000 2>/dev/null || true
+device_config put device_idle max_idle_pending_to 120000 2>/dev/null || true
+device_config put device_idle idle_pending_factor 2.0 2>/dev/null || true
+device_config put device_idle idle_to 900000 2>/dev/null || true
+device_config put device_idle max_idle_to 21600000 2>/dev/null || true
+device_config put device_idle idle_factor 2.0 2>/dev/null || true
+device_config put device_idle min_time_to_alarm 1800000 2>/dev/null || true
+device_config put device_idle quick_doze_delay_to 30000 2>/dev/null || true
+device_config put device_idle light_after_inactive_to 5000 2>/dev/null || true
+device_config put device_idle light_pre_idle_to 10000 2>/dev/null || true
+device_config put device_idle light_idle_to 180000 2>/dev/null || true
+echo "${GREEN}  ✓ 极速休眠持久化参数已注入 (息屏 60s 内挂起 CPU，关机重启不失效)${NC}"
 
 echo "${BLUE}[3/5] 正在关闭后台隐形搜网与定位泄漏 (Wi-Fi/BLE Scanning)...${NC}"
 settings put global wifi_scan_always_enabled 0 2>/dev/null || true
@@ -79,6 +84,10 @@ com.ss.android.ugc.aweme
 com.taobao.taobao
 com.jingdong.app.mall
 com.autonavi.minimap
+com.twitter.android
+com.sina.weibo
+com.huawei.hwid
+com.oixcloud.clash
 "
 
 RESTRICT_COUNT=0
