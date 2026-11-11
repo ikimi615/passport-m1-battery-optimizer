@@ -87,8 +87,17 @@ com.autonavi.minimap
 com.twitter.android
 com.sina.weibo
 com.huawei.hwid
-com.oixcloud.clash
 "
+
+# 确保 VPN 核心服务 (FlClash 等) 不被后台限制拦截 VpnService 网络切换，避免切 Wi-Fi 时触发 IMS 断联
+for VPN_PKG in com.oixcloud.clash com.follow.clash com.github.metacubex.clash.meta com.github.kr328.clash; do
+    if pm list packages 2>/dev/null | grep -q "^package:$VPN_PKG$"; then
+        cmd appops set "$VPN_PKG" RUN_ANY_IN_BACKGROUND allow 2>/dev/null || true
+        cmd appops set "$VPN_PKG" RUN_IN_BACKGROUND allow 2>/dev/null || true
+        cmd appops set "$VPN_PKG" START_FOREGROUND allow 2>/dev/null || true
+        dumpsys deviceidle whitelist +"$VPN_PKG" >/dev/null 2>&1 || true
+    fi
+done
 
 RESTRICT_COUNT=0
 for PKG in $TARGET_APPS; do
